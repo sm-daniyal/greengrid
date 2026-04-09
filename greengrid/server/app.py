@@ -36,7 +36,7 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    from ..models import GreengridAction, GreengridObservation
+    from models import GreengridAction, GreengridObservation
     from .greengrid_environment import GreengridEnvironment
 except ModuleNotFoundError:
     from models import GreengridAction, GreengridObservation

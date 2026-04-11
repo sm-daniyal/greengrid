@@ -1,255 +1,269 @@
+# 🌱 GreenGrid-v0: Carbon-Aware Data Center Job Scheduler
+
+
+## What Is GreenGrid?
+
+GreenGrid is a reinforcement learning environment where an AI agent learns to route computing jobs across global data centers — choosing locations with the lowest carbon intensity to reduce environmental impact.
+
+This is a real problem. Every time you use Google, Meta, or any major tech platform, thousands of computing jobs are being routed across data centers around the world. Smart scheduling can dramatically reduce carbon emissions without sacrificing performance.
+
+GreenGrid gives AI researchers a standardized environment to train and test agents that solve this problem.
+
 ---
-title: Greengrid Environment Server
-emoji: 🎽
-colorFrom: green
-colorTo: blue
-sdk: docker
-pinned: false
-app_port: 8000
-base_path: /web
-tags:
-  - openenv
+
+## The Problem It Solves
+
+Data centers consume about 1-2% of global electricity. At any moment:
+- Oregon might be running on 80% solar (low carbon )(featured)
+- Virginia might be running on coal (high carbon )
+- Mumbai might be cheap but very carbon-heavy 
+
+A smart agent learns to say:
+> "Don't run this job in Virginia right now — send it to Oregon where solar energy is peaking."
+
 ---
 
-# Greengrid Environment
+## How It Works
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+The agent sees this every step:
+=== GreenGrid [EASY] Step 3/10 ===
+DATA CENTERS:
+Oregon       carbon=118 gCO2/kWh  load= 45%  cost=$0.08/hr
+Virginia     carbon=392 gCO2/kWh  load= 60%  cost=$0.06/hr
+Singapore    carbon=461 gCO2/kWh  load= 35%  cost=$0.10/hr
+Frankfurt    carbon=271 gCO2/kWh  load= 50%  cost=$0.09/hr
+Mumbai       carbon=498 gCO2/kWh  load= 25%  cost=$0.05/hr
+JOB QUEUE:
+job_0_0   units= 5  deadline=4  priority=high
+job_0_1   units= 3  deadline=6  priority=low
+Stats: completed=2  failed=0  total_reward=0.84
+ACTION FORMAT: assign <job_id> to <DatacenterName>
+EXAMPLE:       assign job_0_0 to Oregon
 
-## Quick Start
+The agent responds with:
+assign job_0_0 to Oregon
 
-The simplest way to use the Greengrid environment is through the `GreengridEnv` class:
+And gets rewarded based on how smart that decision was.
 
-```python
-from greengrid import GreengridAction, GreengridEnv
+---
 
-try:
-    # Create environment from Docker image
-    greengridenv = GreengridEnv.from_docker_image("greengrid-env:latest")
+## The 3 Tasks
 
-    # Reset
-    result = greengridenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+### Task 1 — Easy: Carbon Minimizer
+- **Goal:** Route jobs to the lowest carbon data center
+- **Steps:** 10 per episode
+- **What makes it easy:** No server failures, single objective
+- **Baseline score:** 0.3892
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
+### Task 2 — Medium: Cost + Carbon Balancer
+- **Goal:** Balance carbon emissions AND running cost AND job deadlines
+- **Steps:** 15 per episode
+- **What makes it harder:** Three competing objectives to optimize simultaneously
+- **Baseline score:** 0.4058
 
-    for msg in messages:
-        result = greengridenv.step(GreengridAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+### Task 3 — Hard: Dynamic SLA Scheduler
+- **Goal:** Route jobs with random server failures, carbon spikes, and priority jobs
+- **Steps:** 20 per episode
+- **What makes it hard:** Servers randomly go offline, carbon values spike unpredictably, high-priority jobs must not be missed
+- **Baseline score:** 0.3394
 
-finally:
-    # Always clean up
-    greengridenv.close()
-```
+---
 
-That's it! The `GreengridEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+## Reward Function
 
-## Building the Docker Image
+The agent receives feedback every single step — not just at the end:
 
-Before using the environment, you need to build the Docker image:
+| Situation | Reward |
+|-----------|--------|
+| Route to low carbon datacenter | up to +0.5 |
+| Route cheaply (medium + hard) | up to +0.3 |
+| Meet job deadline | +0.2 |
+| Job expires / deadline missed | -0.2 |
+| Send to offline server | -0.3 |
+| Invalid command format | -0.2 |
+| Overload a server (load > 80%) | -0.3 |
 
-```bash
-# From project root
-docker build -t greengrid-env:latest -f server/Dockerfile .
-```
+---
 
-## Deploying to Hugging Face Spaces
+## Action Space
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+Text command in this exact format:
+assign <job_id> to <DatacenterName>
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+Valid datacenter names:
+- `Oregon`
+- `Virginia`
+- `Singapore`
+- `Frankfurt`
+- `Mumbai`
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+Example:
+assign job_2_1 to Frankfurt
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+---
 
-### Prerequisites
+## Observation Space
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+Text description containing:
+- Current step number and max steps
+- All 5 data centers with carbon intensity (gCO2/kWh), server load (%), cost per hour
+- Pending job queue with compute units, deadline countdown, priority level
+- Running stats — completed jobs, failed jobs, total reward so far
+- Result of last action taken
 
-### Options
-
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
-
-### Examples
-
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
-
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
-
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
-
-# Push as a private space
-openenv push --private
-
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
-
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
-
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
-
-## Environment Details
-
-### Action
-**GreengridAction**: Contains a single field
-- `message` (str) - The message to echo back
-
-### Observation
-**GreengridObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
-
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
-
-## Advanced Usage
-
-### Connecting to an Existing Server
-
-If you already have a Greengrid environment server running, you can connect directly:
-
-```python
-from greengrid import GreengridEnv
-
-# Connect to existing server
-greengridenv = GreengridEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = greengridenv.reset()
-result = greengridenv.step(GreengridAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `greengridenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from greengrid import GreengridAction, GreengridEnv
-
-# Connect with context manager (auto-connects and closes)
-with GreengridEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(GreengridAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    GreengridEnvironment,  # Pass class, not instance
-    GreengridAction,
-    GreengridObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from greengrid import GreengridAction, GreengridEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with GreengridEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(GreengridAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/greengrid_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
-```
+---
 
 ## Project Structure
-
-```
 greengrid/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # GreengridEnv client
-├── models.py              # Action and Observation models
-└── server/
-    ├── __init__.py        # Server module exports
-    ├── greengrid_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+├── models.py                      
+├── server/
+│   ├── init.py                # Package init
+│   ├── app.py                     # FastAPI web server
+│   └── greengrid_environment.py  
+├── grader.py                      # Automated scoring (0.0 to 1.0)
+├── inference.py                   # LLM agent baseline script
+├── openenv.yaml                   
+├── pyproject.toml                 # Project dependencies
+└── README.md                      
+
+---
+
+## Setup and Usage
+
+### Option 1 — Use Live HuggingFace Space (Easiest)
+
+No setup needed! Just visit:
+https://huggingface.co/spaces/smdaniyalhf/greengrid
+
+Or send API requests directly:
+```python
+import httpx
+
+# Reset environment
+response = httpx.post("https://smdaniyalhf-greengrid.hf.space/reset")
+print(response.json())
+
+# Take a step
+response = httpx.post(
+    "https://smdaniyalhf-greengrid.hf.space/step",
+    json={"message": "assign job_0_0 to Oregon"}
+)
+print(response.json())
 ```
+
+### Option 2 — Run Locally
+
+```bash
+# Step 1 - Clone the repo
+git clone https://huggingface.co/spaces/smdaniyalhf/greengrid
+cd greengrid
+
+# Step 2 - Create virtual environment
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+
+# Step 3 - Install dependencies
+pip install openenv-core uvicorn fastapi pydantic
+
+# Step 4 - Start server
+uv run server
+
+# Step 5 - Open in browser
+# http://127.0.0.1:8000/docs
+```
+
+### Option 3 - Run Grader
+
+```bash
+python grader.py
+```
+
+Expected output:
+GreenGrid Grader Results:
+easy     → 0.3892
+medium   → 0.4058
+hard     → 0.3394
+Done!
+
+### Option 4 - Run Inference Script
+
+```bash
+export HF_TOKEN=your_token_here
+export API_BASE_URL=https://router.huggingface.co/v1
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+python inference.py
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/reset` | POST | Start new episode |
+| `/step` | POST | Take an action |
+| `/state` | GET | Get current state |
+| `/docs` | GET | Interactive API docs |
+| `/health` | GET | Check if server is running |
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_BASE_URL` | LLM API endpoint | HuggingFace router |
+| `MODEL_NAME` | Model to use for inference | Qwen/Qwen2.5-72B-Instruct |
+| `HF_TOKEN` | HuggingFace API token | Required for inference |
+
+---
+
+## Technical Stack
+
+| Technology | Purpose |
+|-----------|---------|
+| OpenEnv | RL environment framework by Meta + HuggingFace |
+| FastAPI | High performance Python web framework |
+| Pydantic | Data validation and typed models |
+| uvicorn | ASGI server for production |
+| Docker | Containerized deployment |
+| HuggingFace Spaces | cloud hosting |
+
+---
+
+
+GreenGrid provides a standardized, open-source RL environment so researchers can train and benchmark agents that tackle this challenge — contributing to a more sustainable internet.
+
+---
+
+## Data Centers
+
+| Name     | Base Carbon | Cost/hr | Region       |
+|------    |------------ |---------|------------- |
+| Oregon   | 120 gCO2/kWh| $0.08   | US West      |
+| Virginia | 380 gCO2/kWh| $0.06   | US East      |
+| Singapore| 450 gCO2/kWh| $0.10   | Asia Pacific |
+| Frankfurt| 280 gCO2/kWh| $0.09   | Europe       |
+| Mumbai   | 500 gCO2/kWh| $0.05   | South Asia   |
+
+Carbon values fluctuate each step simulating real-world renewable energy availability.
+
+---
+
+## Contributing
+
+Contributions welcome! To improve this environment:
+
+1. Fork the space on HuggingFace
+2. Make your changes
+3. Submit a pull request
+
+
+*Built with ❤️ for the Meta x Scaler OpenEnv Hackathon 2026*
+*Deployed on HuggingFace Spaces*
+*Repo available on github too*

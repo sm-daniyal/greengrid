@@ -1,4 +1,4 @@
-# 🌱 GreenGrid-v0: Carbon-Aware Data Center Job Scheduler
+# GreenGrid-v0: Carbon-Aware Data Center Job Scheduler
 
 
 ## What Is GreenGrid?

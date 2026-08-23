@@ -21,7 +21,7 @@ tags:
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-green.svg)](LICENSE)
 
-**[Live Interactive Console](https://huggingface.co/spaces/smdaniyalhf/greengrid)** | **[API Documentation](https://huggingface.co/spaces/smdaniyalhf/greengrid/docs)** | **[GitHub Repository](https://github.com/sm-daniyal/greengrid)**
+**[Live Interactive Console](https://huggingface.co/spaces/smdaniyalhf/greengrid)**|**[GitHub Repository](https://github.com/sm-daniyal/greengrid)**
 
 GreenGrid is an open-source evaluation benchmark and simulation environment for autonomous AI agents and reinforcement learning policies tasked with dynamic, carbon-aware data center compute scheduling.
 

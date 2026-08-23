@@ -36,6 +36,7 @@ telemetry_service = GridTelemetryService()
 dispatcher = WorkloadDispatcher()
 
 
+@app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 @app.get("/dashboard", response_class=HTMLResponse, tags=["Dashboard"])
 def get_dashboard():
     """Serve the interactive GreenGrid Infrastructure Console."""
